@@ -2,30 +2,30 @@ package me.kodysimpson.securitycam.data.recordables;
 
 import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.protocol.entity.type.EntityTypes;
+import com.github.retrooper.packetevents.protocol.npc.NPC;
+import com.github.retrooper.packetevents.protocol.player.GameMode;
+import com.github.retrooper.packetevents.protocol.player.TextureProperty;
 import com.github.retrooper.packetevents.protocol.player.User;
+import com.github.retrooper.packetevents.protocol.player.UserProfile;
+import com.github.retrooper.packetevents.util.MojangAPIUtil;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSpawnEntity;
-import com.mojang.authlib.GameProfile;
 import io.github.retrooper.packetevents.util.SpigotConversionUtil;
+import io.github.retrooper.packetevents.util.SpigotReflectionUtil;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import me.kodysimpson.securitycam.data.Recordable;
 import me.kodysimpson.securitycam.data.Replay;
-import net.minecraft.network.protocol.game.ClientboundAddPlayerPacket;
-import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.network.ServerGamePacketListenerImpl;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bson.codecs.pojo.annotations.BsonDiscriminator;
 import org.bukkit.Location;
-import org.bukkit.craftbukkit.v1_20_R1.entity.CraftPlayer;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 
 import java.lang.reflect.Field;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -54,19 +54,19 @@ public class SpawnEntityRecordable extends Recordable {
     public void replay(Replay replay, User user) throws Exception {
         if (entityType == EntityType.PLAYER){
 
-            Player player = replay.getViewer();
-            CraftPlayer craftPlayer = (CraftPlayer) player;
-            ServerPlayer serverPlayer = craftPlayer.getHandle();
-            MinecraftServer server = serverPlayer.getServer();
-            ServerLevel level = serverPlayer.serverLevel().getLevel();
+            List<TextureProperty> skin = MojangAPIUtil.requestPlayerTextureProperties(MojangAPIUtil.requestPlayerUUID(playerName));
 
-            GameProfile gameProfile = new GameProfile(UUID.randomUUID(), playerName);
-            ServerPlayer npc = new ServerPlayer(server, level, gameProfile);
-            npc.setPos(location.getX(), location.getY(), location.getZ());
+            NPC npc = new NPC(new UserProfile(UUID.randomUUID(), playerName, skin),
+                    SpigotReflectionUtil.generateEntityId(),
+                    GameMode.SURVIVAL,
+                    null,
+                    null,
+                    null,
+                    null);
+            npc.setLocation(new com.github.retrooper.packetevents.protocol.world.Location(location.getX(), location.getY(), location.getZ(),
+                    location.getYaw(), location.getPitch()));
 
-            ServerGamePacketListenerImpl ps = serverPlayer.connection;
-            ps.send(new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER, npc));
-            ps.send(new ClientboundAddPlayerPacket(npc));
+            npc.spawn(PacketEvents.getAPI().getPlayerManager().getChannel(replay.getViewer()));
 
             replay.getSpawnedEntities().put(bukkitEntityId, npc.getId());
         }else{
